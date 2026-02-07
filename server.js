@@ -149,8 +149,8 @@ setInterval(async () => {
 
 // --- Helpers ---
 const getTodaysPassword = () => {
-    const date = new Date();
-    const day = date.getDate().toString().padStart(2, '0');
+    const options = { timeZone: 'Asia/Kolkata', day: '2-digit' };
+    const day = new Intl.DateTimeFormat('en-IN', options).format(new Date());
     return `${day}8080`;
 };
 
@@ -346,6 +346,26 @@ app.get('/api/media/:id', requireAuth, async (req, res) => {
 app.post('/api/logout', (req, res) => {
     req.session = null;
     res.json({ success: true });
+});
+
+app.get('/health', (req, res) => {
+    const memory = process.memoryUsage();
+    res.json({
+        status: 'ok',
+        environment: process.env.NODE_ENV || 'development',
+        uptime: process.uptime(),
+        node_version: process.version,
+        memory: {
+            heapUsed: Math.round(memory.heapUsed / 1024 / 1024) + 'MB',
+            heapTotal: Math.round(memory.heapTotal / 1024 / 1024) + 'MB',
+            rss: Math.round(memory.rss / 1024 / 1024) + 'MB'
+        },
+        database: {
+            connected: dbConnected,
+            queueSize: offlineQueue.length
+        },
+        timestamp: new Date().toISOString()
+    });
 });
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));

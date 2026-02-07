@@ -1,63 +1,129 @@
-# Secure Ephemeral Chat
+# 🛡️ Secure Ephemeral Chat (Co)
 
-A simple, secure, session-based chat application designed for stealthy usage. It features a blank startup screen, password protection based on the current date, and automatic inactivity locking.
+A state-of-the-art, premium ephemeral communication platform engineered for high-privacy environments. This application prioritizes stealth, robust data handling, and professional aesthetics, providing a secure bridge for communication that feels "invisible" until authorized.
 
-## Features
+---
 
-- **Stealth Mode**: Starts with a blank screen. Authenticate by typing the daily password blindly.
-- **Inactivity Lock**: Automatically locks and stops polling after 5 seconds of inactivity.
-- **Auto-Keyboard**: Clicking anywhere on the blank screen on mobile devices opens the keyboard.
-- **Session Based**: Maintains user session securely.
-- **Database**: Stores messages in PostgreSQL.
+## 🚀 Product Scope & Vision
 
-## Password Logic
+The platform is designed for users who require a high degree of privacy without sacrificing the power of a modern chat interface. It serves three primary scopes:
+1. **Privacy-First Communication**: Stealth-entry system avoids drawing attention.
+2. **Reliable Data Exchange**: Production-grade file handling and offline queuing.
+3. **Seamless Monitoring**: Integrated health diagnostics for 24/7 uptime monitoring.
 
-The password changes daily.
-Format: `DD8080`
-- `DD`: The current day of the month (e.g., `07` for the 7th).
-- `8080`: Fixed suffix.
+---
 
-**Example**: On the 7th of the month, the password is `078080`.
+## ✨ Key Features
 
-## Deployment
+### 🟢 1. Triple-Layer Stealth & Security
+- **Invisible Entry**: Launches to a generic "Computing..." screen. No login forms or buttons are visible to casual observers.
+- **Dynamic IST Password**: Authentication is synchronized with **Indian Standard Time (IST)**. Even if local time is changed on the device, only the IST date (`DD8080`) will grant access.
+- **Auto-Inactivity Wipe**: The application automatically "re-locks" and wipes sensitive UI data after 5 seconds of inactivity, returning to its stealth state.
 
-This app is designed to be split into two parts (optional) or run as a monolith on Render.
+### 📎 2. Advanced Attachment Engine
+- **Global Dropzone**: Functional across the entire application—even in the locked "Computing" state. Drag and drop any file to pre-stage an upload.
+- **Stealth Indicators**: A subtle filename display confirms file selection without exposing the chat interface.
+- **Production Media Support**: High-performance handling of images and binary files via Postgres `bytea` storage.
+- **Rich Previews**: Automatic thumbnail generation for images and specialized file icons for documents/binaries.
 
-### Option 1: Monolith on Render (Easiest)
-1.  **Deploy to Render**:
-    *   Connect repo.
-    *   Runtime: `Docker`.
-    *   Env Vars: `DATABASE_URL` (from Render Postgres), `SESSION_SECRET`.
-2.  **Access**: Go to your Render URL.
+### 🏛️ 3. Architecture & Reliability
+- **Offline Persistence**: Uses a client-side and server-side queuing strategy. If the database connection drops, messages are safely queued and synchronized once the heartbeat restores.
+- **Session Isolation**: Secure, encrypted cookie-based sessions with HTTP-only and SameSite flags optimized for production.
+- **Lazy Loading**: High-resolution media is loaded on-demand to optimize bandwidth and initial render speed.
 
-### Option 2: Frontend on GitHub Pages + Backend on Render
-1.  **Backend (Render)**:
-    *   Same as Option 1.
-    *   **Important**: Copy your Render Web Service URL (e.g., `https://my-app.onrender.com`).
-2.  **Frontend (GitHub Pages)**:
-    *   Edit `index.html` in your repo:
-        *   Find `const RENDER_BACKEND_URL = ...`
-        *   Replace with your Render URL.
-    *   Go to GitHub Repo Settings -> Pages.
-    *   Source: `Deploy from a branch`.
-    *   Branch: `main`, Folder: `/(root)`.
-    *   Save.
-3.  **Access**: Go to your GitHub Pages URL (e.g., `https://username.github.io/repo`).
+---
+
+## 🛠️ System Architecture
+
+```mermaid
+graph TD
+    A[Public Client] -->|Stealth Mode| B(Auth Middleware)
+    B -->|IST Password Sync| C{Authorized?}
+    C -->|Yes| D[Chat UI Injection]
+    C -->|No| E[Generic Loading State]
+    D --> F[Express Server]
+    F -->|Multer| G[Binary Buffer]
+    G --> H[(PostgreSQL + Media Storage)]
+    F --> I[Memory Queue]
+    I -->|Auto-Sync| H
+```
+
+---
+
+## 📂 API Reference
+
+### 🔐 Authentication
+`POST /api/login`
+- **Body**: `{ "password": "DD8080" }`
+- **Logic**: Validates against `Intl.DateTimeFormat` (Asia/Kolkata).
+
+### 💬 Messaging
+`GET /api/messages`
+- Returns last 100 entries with media metadata.
+
+`POST /api/messages`
+- Supports `multipart/form-data` for file uploads.
+- Automatic integration with the offline queuing system.
+
+### 📥 Media
+`GET /api/media/:id`
+- Streams binary data directly from the database with appropriate MIME headers.
+
+### 🩺 Monitoring
+`GET /health`
+- **Real-time Diagnostics**:
+    - `environment`: Deployment stage (prod/dev).
+    - `uptime`: Server lifecycle duration.
+    - `memory`: Precise heap usage (Used/Total/RSS).
+    - `database`: Real-time connectivity and queue depth.
+
+---
+
+## ⚙️ Configuration
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `PORT` | Listening port for the application | `3000` |
+| `DATABASE_URL` | PostgreSQL connection string | *Required* |
+| `SESSION_SECRET` | Secret key for encrypted cookies | `secret_key_123` |
+| `TABLE_MSG` | Custom name for the message table | `messages_v2` |
+| `TABLE_MEDIA` | Custom name for binary storage | `media_storage_v2` |
+
+---
+
+## 🏃 Getting Started
 
 ### Local Development
+1. **Prepare Environment**:
+   ```bash
+   cp .env.example .env # Create your .env file
+   ```
+2. **Install & Start**:
+   ```bash
+   npm install
+   npm start
+   ```
+3. **Access**: Navigate to `http://localhost:3000`.
 
-1.  Clone the repository.
-2.  Install dependencies: `npm install`.
-3.  Set up a local Postgres database (or run without for in-memory mode).
-4.  Run with environment variables:
-    ```bash
-    export DATABASE_URL=postgres://user:pass@localhost:5432/dbname
-    npm start
-    ```
-5.  Open `http://localhost:3000`.
+### Production Deployment (Render/Docker)
+The application includes a `Dockerfile` for streamlined containerized deployment.
+1. Connect this repository to **Render**.
+2. Select **Web Service** and choose **Docker** as the environment.
+3. Add your `DATABASE_URL` and `SESSION_SECRET` to the environment variables.
 
-## Tech Stack
+---
 
-- **Frontend**: Plain HTML, CSS, JavaScript (Poll implementation).
-- **Backend**: Node.js (Express).
-- **Database**: PostgreSQL (pg).
+## 🗺️ Roadmap & Future Scope
+- [ ] **End-to-End Encryption (E2EE)**: Implementing client-side Web Crypto API for message bodies.
+- [ ] **Self-Destruct Timers**: Individual message TTL (Time To Live).
+- [ ] **PWA Support**: Offline-capable progress web app with service worker notifications.
+- [ ] **Admin Dashboard**: A separate stealth route for database cleanup and user auditing.
+
+---
+
+## 🎨 Tech Stack
+- **Engine**: Node.js (v18+) & Express
+- **Storage**: PostgreSQL (Relational + Binary)
+- **Styling**: Vanilla CSS (Tailored UI/UX)
+- **Auth**: Cookie-Session & IST Time-Sync
+- **Uploads**: Multer Buffer Management
