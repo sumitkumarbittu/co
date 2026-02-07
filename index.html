@@ -4,274 +4,241 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Secure Chat</title>
+    <title>Loading...</title>
     <style>
-        /* Base Reset */
-        * {
+        body {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-
-        body,
-        html {
-            height: 100%;
-            font-family: 'Courier New', Courier, monospace;
-            overflow: hidden;
             background-color: #000;
-            color: #0f0;
+            color: #333;
+            font-family: monospace;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
-        /* Blank Screen Wrapper */
-        #blank-screen {
+        /* The container for everything (loading text OR chat) */
+        #c {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Hidden Input covering the screen for stealth capture */
+        #h {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: #000000;
-            z-index: 9999;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        /* Hidden Input for Mobile Keyboard */
-        #hidden-input {
-            position: absolute;
             opacity: 0;
-            width: 1px;
-            height: 1px;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-            /* Let clicks pass through to the blank screen handler */
+            background: transparent;
+            border: none;
+            outline: none;
+            cursor: default;
+            z-index: 10;
         }
 
-        /* Loading/Status Indicator */
-        #status {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            font-size: 10px;
-            color: #444;
+        /* Generic loading style */
+        .l-text {
+            font-size: 12px;
+            color: #222;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 0.3;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+
+            100% {
+                opacity: 0.3;
+            }
         }
     </style>
 </head>
 
 <body>
 
-    <!-- 1. Overlay / Blank Screen (Always present initially) -->
-    <div id="blank-screen">
-        <!-- Hidden input to capture password and trigger keyboard on mobile -->
-        <input type="text" id="hidden-input" autocomplete="off" />
+    <div id="c">
+        <div class="l-text">Computing...</div>
     </div>
-
-    <!-- 2. Chat Interface (Injected dynamically) -->
-    <div id="app-root" style="height: 100%"></div>
-
-    <div id="status">Disconnected</div>
+    <input id="h" autocomplete="off" autofocus>
 
     <script>
         // --- Configuration ---
-        // UPDATE THIS URL AFTER DEPLOYING TO RENDER
         const RENDER_BACKEND_URL = 'https://co2026.onrender.com';
-
         const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const API_BASE_URL = (isLocal || window.location.origin.includes('github.io')) && !isLocal ? RENDER_BACKEND_URL : '';
 
-        console.log('API Base:', API_BASE_URL || 'Relative Path');
+        // --- State ---
+        let t; // timer
+        let l = true; // blocked/locked
+        let a = false; // auth
+        let p = null; // poll
+        let d = null; // debounce
 
-        // --- State Management ---
-        const INACTIVITY_LIMIT = 5000; // 5 seconds
-        let inactivityTimer;
-        let isLocked = true;
-        let isAuthenticated = false;
-        let pollingInterval = null;
-        let loginDebounceTimer = null;
+        // --- Elements ---
+        const c = document.getElementById('c');
+        const h = document.getElementById('h');
 
-        // Elements
-        const blankScreen = document.getElementById('blank-screen');
-        const hiddenInput = document.getElementById('hidden-input');
-        const appRoot = document.getElementById('app-root');
-        const statusDiv = document.getElementById('status');
+        // --- Stealth Logic ---
 
-        // Dynamic Elements (set after injection)
-        let messagesDiv = null;
-        let messageInput = null;
-        let inputForm = null;
+        function lock() {
+            l = true;
+            // Restore stealth look
+            c.innerHTML = '<div class="l-text">Computing...</div>';
+            c.style.display = 'flex'; // Ensure centered loading text
+            stopPoll();
+            h.value = '';
+            h.style.display = 'block'; // Ensure input covers screen
+            h.focus();
+        }
 
-        // --- Inactivity Logic ---
-        function resetInactivityTimer() {
-            clearTimeout(inactivityTimer);
-            if (isAuthenticated && !isLocked) {
-                inactivityTimer = setTimeout(lockScreen, INACTIVITY_LIMIT);
+        function unlock(ui) {
+            l = false;
+            // Inject UI
+            c.innerHTML = ui;
+            c.style.display = 'block'; // Let chat take full space naturally
+            // h.style.display = 'none'; // Keep input? No, chat needs clicks. 
+            // We move h to background or remove it. 
+            // Actually, we keep h for re-locking if we want, but chat input needs focus.
+            h.style.display = 'none';
+
+            initChat(); // Re-bind chat events
+            startPoll();
+            resetTimer();
+        }
+
+        function resetTimer() {
+            clearTimeout(t);
+            if (a && !l) {
+                // 5 minute timeout for example? User said 5s before. Keeping 5s.
+                t = setTimeout(lock, 5000);
             }
         }
 
-        function lockScreen() {
-            isLocked = true;
-            blankScreen.style.display = 'flex';
-            if (appRoot) appRoot.style.display = 'none';
-            stopPolling();
-            hiddenInput.value = ''; // Clear typed password
-            statusDiv.textContent = 'Locked';
-            console.log('Screen Locked');
-        }
-
-        function unlockScreen() {
-            isLocked = false;
-            blankScreen.style.display = 'none';
-            if (appRoot) appRoot.style.display = 'block';
-            if (messageInput) messageInput.focus();
-            startPolling();
-            resetInactivityTimer();
-            statusDiv.textContent = 'Active';
-        }
-
-        // --- Interaction Listeners for Inactivity ---
-        ['mousemove', 'keydown', 'click', 'touchstart'].forEach(evt => {
-            document.addEventListener(evt, () => {
-                if (!isLocked) resetInactivityTimer();
+        // Global listeners for activity
+        ['mousemove', 'keydown', 'click', 'touchstart'].forEach(e => {
+            document.addEventListener(e, () => {
+                if (!l) resetTimer();
             });
         });
 
-        // --- Blank Screen Logic ---
-        // Clicking anywhere on the blank screen focuses the hidden input
-        blankScreen.addEventListener('click', () => {
-            hiddenInput.focus();
+        // Input Handler (Stealth)
+        h.addEventListener('input', (e) => {
+            const v = e.target.value;
+            clearTimeout(d);
+            d = setTimeout(() => tryAuth(v), 800);
         });
 
-        // Handle Password Input with Debounce (Stealth Mode)
-        hiddenInput.addEventListener('input', (e) => {
-            const val = e.target.value;
-
-            clearTimeout(loginDebounceTimer);
-            // Wait 800ms after last keystroke to check password
-            loginDebounceTimer = setTimeout(() => {
-                attemptLogin(val);
-            }, 800);
+        // Focus helper
+        document.addEventListener('click', () => {
+            if (l) h.focus();
         });
 
-        async function attemptLogin(password) {
+        async function tryAuth(pw) {
             try {
                 const url = API_BASE_URL ? `${API_BASE_URL}/api/login` : '/api/login';
-
-                const res = await fetch(url, {
+                const r = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password }),
+                    body: JSON.stringify({ password: pw }),
                     credentials: 'include'
                 });
 
-                if (res.ok) {
-                    const data = await res.json();
+                if (r.ok) {
+                    const data = await r.json();
                     if (data.success && data.ui) {
-                        isAuthenticated = true;
-                        injectChatUI(data.ui);
-                        hiddenInput.value = ''; // Clear password
-                        unlockScreen();
-                    } else if (data.success && !data.ui) {
-                        console.error('Login successful but UI payload missing. Backend might be stale.');
+                        a = true;
+                        h.value = '';
+                        unlock(data.ui);
                     }
-                } else {
-                    // Silent failure for stealth
-                    console.log('Auth check failed');
                 }
-            } catch (err) {
-                console.error('Login error', err);
-            }
+            } catch (ignore) { }
         }
 
-        function injectChatUI(htmlContent) {
-            // Only inject if not already there or if we want to refresh
-            if (!document.getElementById('chat-container')) {
-                appRoot.innerHTML = htmlContent;
+        // --- Chat Logic (Lazy Loaded) ---
+        let msgDiv = null;
+        let inInput = null;
 
-                // Re-bind elements
-                messagesDiv = document.getElementById('messages');
-                messageInput = document.getElementById('message-input');
-                inputForm = document.getElementById('input-area');
+        function initChat() {
+            const f = document.querySelector('form');
+            inInput = document.querySelector('input[type="text"]'); // The one inside the new UI
+            msgDiv = document.querySelector('#messages'); // Assuming the ID is in the server payload
 
-                // Bind Chat Events
-                inputForm.addEventListener('submit', async (e) => {
+            if (f && inInput) {
+                f.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    const content = messageInput.value;
-                    if (!content) return;
-
-                    try {
-                        const url = API_BASE_URL ? `${API_BASE_URL}/api/messages` : '/api/messages';
-
-                        await fetch(url, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ content }),
-                            credentials: 'include'
-                        });
-                        messageInput.value = '';
-                        fetchMessages();
-                        resetInactivityTimer();
-                    } catch (err) {
-                        console.error('Send error', err);
-                    }
+                    if (!inInput.value) return;
+                    await send(inInput.value);
+                    inInput.value = '';
+                    fetchMsgs();
+                    resetTimer();
                 });
+                inInput.focus();
             }
         }
 
-        // --- Chat Logic ---
-        async function fetchMessages() {
-            if (isLocked) return;
+        async function fetchMsgs() {
+            if (l) return;
             try {
                 const url = API_BASE_URL ? `${API_BASE_URL}/api/messages` : '/api/messages';
-
-                const res = await fetch(url, {
-                    credentials: 'include'
-                });
-                if (res.status === 401) {
-                    lockScreen();
-                    isAuthenticated = false;
-                    return;
-                }
-                const data = await res.json();
-                renderMessages(data);
-            } catch (err) {
-                console.error('Fetch error', err);
-            }
+                const r = await fetch(url, { credentials: 'include' });
+                if (r.status === 401) { lock(); a = false; return; }
+                const d = await r.json();
+                render(d);
+            } catch (e) { }
         }
 
-        function renderMessages(msgs) {
-            if (!messagesDiv) return;
-            messagesDiv.innerHTML = msgs.map(m => `
-                <div class="message" style="margin-bottom: 8px; word-wrap: break-word;">
-                    <span class="time" style="font-size: 0.8em; color: #666; margin-right: 8px;">[${new Date(m.created_at).toLocaleTimeString()}]</span>
-                    <span class="content">${escapeHtml(m.content)}</span>
+        function render(msgs) {
+            if (!msgDiv) return;
+            msgDiv.innerHTML = msgs.map(m => `
+                <div style="margin-bottom:8px; word-wrap:break-word;">
+                    <span style="font-size:0.8em; color:#666; margin-right:8px;">[${new Date(m.created_at).toLocaleTimeString()}]</span>
+                    <span>${esc(m.content)}</span>
                 </div>
             `).join('');
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            msgDiv.scrollTop = msgDiv.scrollHeight;
         }
 
-        function escapeHtml(text) {
-            return text
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
+        async function send(c) {
+            try {
+                const url = API_BASE_URL ? `${API_BASE_URL}/api/messages` : '/api/messages';
+                await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: c }),
+                    credentials: 'include'
+                });
+            } catch (e) { }
         }
 
-        function startPolling() {
-            if (pollingInterval) clearInterval(pollingInterval);
-            fetchMessages();
-            pollingInterval = setInterval(fetchMessages, 2000);
+        function startPoll() {
+            if (p) clearInterval(p);
+            fetchMsgs();
+            p = setInterval(fetchMsgs, 2000);
         }
 
-        function stopPolling() {
-            if (pollingInterval) clearInterval(pollingInterval);
-            pollingInterval = null;
+        function stopPoll() {
+            if (p) clearInterval(p);
+            p = null;
         }
 
+        function esc(t) {
+            return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        // Init
+        h.focus();
     </script>
 </body>
 
