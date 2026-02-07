@@ -261,32 +261,18 @@ const CHAT_UI_HTML = `
 app.post('/api/login', async (req, res) => {
     const { password } = req.body;
 
-    // Extract server ID from password
-    const serverId = serverConfig.extractServerId(password);
+    const options = { timeZone: 'Asia/Kolkata', day: '2-digit' };
+    const day = new Intl.DateTimeFormat('en-IN', options).format(new Date());
 
-    if (!serverId) {
-        return res.status(401).json({ error: 'Invalid password format' });
-    }
+    const serverId = serverConfig.extractServerId(password, day);
 
-    // Check if server ID is valid
-    if (!serverConfig.isValidServer(serverId)) {
-        return res.status(401).json({ error: 'Invalid server' });
-    }
-
-    // Check if password matches pattern DDXXXX
-    const correctPassword = getTodaysPassword();
-    const expectedPassword = correctPassword.slice(0, 2) + serverId; // DD + XXXX
-
-    if (password && typeof password === 'string' && password === expectedPassword) {
-        // Initialize server tables if not already done
+    if (serverId) {
         await initServerTables(serverId);
-
         req.session.authenticated = true;
         req.session.serverId = serverId;
-
         res.json({ success: true, ui: CHAT_UI_HTML });
     } else {
-        res.status(401).json({ error: 'Invalid password' });
+        res.status(401).json({ error: 'Invalid' });
     }
 });
 

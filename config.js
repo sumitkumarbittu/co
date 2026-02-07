@@ -18,15 +18,16 @@ module.exports = {
         };
     },
 
-    extractServerId: (password) => {
-        if (!password || typeof password !== 'string') return null;
+    extractServerId: (input, datePrefix) => {
+        if (!input || typeof input !== 'string' || !datePrefix) return null;
 
-        if (password.length < 6) return null;
+        for (const serverId of SERVERS) {
+            const pattern = datePrefix + serverId;
+            if (input.includes(pattern)) {
+                return serverId;
+            }
+        }
 
-        const serverId = password.slice(-4);
-
-        if (!/^\d{4}$/.test(serverId)) return null;
-
-        return serverId;
+        return null;
     }
 };
