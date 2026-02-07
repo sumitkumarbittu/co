@@ -26,12 +26,13 @@ app.use(bodyParser.json());
 
 
 // Session configuration
+const isProduction = process.env.NODE_ENV === 'production';
 app.use(cookieSession({
     name: 'session',
     keys: [process.env.SESSION_SECRET || 'secret_key_123'],
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: 'none', // Required for cross-origin (GH Pages -> Render)
-    secure: true,     // Required for sameSite: 'none'
+    sameSite: isProduction ? 'none' : 'lax', // 'none' for cross-site (Render+GH Pages), 'lax' for local
+    secure: isProduction,     // Must be true for sameSite: 'none'
     httpOnly: true
 }));
 
@@ -89,6 +90,17 @@ const requireAuth = (req, res, next) => {
 
 // Routes
 
+// Chat UI Template (only sent after auth)
+const CHAT_UI_HTML = `
+<div id="chat-container" style="display: flex; flex-direction: column; height: 100%; padding: 20px; max-width: 800px; margin: 0 auto;">
+    <div id="messages" style="flex: 1; overflow-y: auto; border: 1px solid #333; padding: 10px; margin-bottom: 20px; background: #111;"></div>
+    <form id="input-area" style="display: flex; gap: 10px;">
+        <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" style="flex: 1; padding: 10px; background: #222; border: 1px solid #444; color: #fff; outline: none;">
+        <button type="submit" style="padding: 10px 20px; background: #004400; color: #0f0; border: 1px solid #0f0; cursor: pointer;">Send</button>
+    </form>
+</div>
+`;
+
 // 1. Login
 app.post('/api/login', (req, res) => {
     const { password } = req.body;
@@ -98,7 +110,8 @@ app.post('/api/login', (req, res) => {
     // Stick to the rigorous check for "secure" apps.
     if (password === correctPassword) {
         req.session.authenticated = true;
-        res.json({ success: true });
+        // Return the UI HTML only on success
+        res.json({ success: true, ui: CHAT_UI_HTML });
     } else {
         res.status(401).json({ error: 'Invalid password' });
     }
