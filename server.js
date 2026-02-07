@@ -91,13 +91,42 @@ const requireAuth = (req, res, next) => {
 // Routes
 
 // Chat UI Template (only sent after auth)
+// Chat UI Template
 const CHAT_UI_HTML = `
-<div id="chat-container" style="display: flex; flex-direction: column; height: 100%; padding: 20px; max-width: 800px; margin: 0 auto;">
-    <div id="messages" style="flex: 1; overflow-y: auto; border: 1px solid #333; padding: 10px; margin-bottom: 20px; background: #111;"></div>
-    <form id="input-area" style="display: flex; gap: 10px;">
-        <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" style="flex: 1; padding: 10px; background: #222; border: 1px solid #444; color: #fff; outline: none;">
-        <button type="submit" style="padding: 10px 20px; background: #004400; color: #0f0; border: 1px solid #0f0; cursor: pointer;">Send</button>
-    </form>
+<style>
+  .chat-app { display: flex; flex-direction: column; height: 100% !important; background: #121212; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; position: relative; overflow: hidden; }
+  .chat-header { padding: 15px 20px; background: rgba(30, 30, 30, 0.95); backdrop-filter: blur(10px); color: #fff; font-weight: 600; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; z-index: 10; flex-shrink: 0; }
+  .chat-title { display: flex; align-items: center; gap: 10px; font-size: 16px; letter-spacing: 0.5px; }
+  .chat-status { width: 8px; height: 8px; background: #00e676; border-radius: 50%; box-shadow: 0 0 8px #00e676; animation: blink 2s infinite; }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+  .msg-row { display: flex; flex-direction: column; animation: fadeIn 0.3s ease; width: 100%; }
+  .msg-bubble { align-self: flex-start; max-width: 85%; padding: 12px 16px; background: #2c2c2c; color: #e0e0e0; border-radius: 18px; border-bottom-left-radius: 4px; font-size: 15px; line-height: 1.5; box-shadow: 0 2px 5px rgba(0,0,0,0.1); word-wrap: break-word; position: relative; }
+  .msg-time { font-size: 10px; color: #888; margin-top: 6px; text-align: right; opacity: 0.7; }
+  .chat-input-area { padding: 12px 16px; background: rgba(30,30,30,0.95); backdrop-filter: blur(10px); border-top: 1px solid #333; display: flex; gap: 12px; align-items: center; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom, 12px); }
+  .chat-input { flex: 1; background: #252525; border: 1px solid #3a3a3a; padding: 12px 18px; border-radius: 24px; color: #fff; font-size: 16px; outline: none; transition: all 0.2s; -webkit-appearance: none; }
+  .chat-input:focus { background: #2c2c2c; border-color: #555; }
+  .send-btn { background: linear-gradient(135deg, #007aff, #0056b3); border: none; width: 44px; height: 44px; border-radius: 50%; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,122,255,0.3); transition: transform 0.1s; flex-shrink: 0; }
+  .send-btn:active { transform: scale(0.92); }
+  
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  
+  /* Scrollbar Styling */
+  .chat-messages::-webkit-scrollbar { width: 6px; }
+  .chat-messages::-webkit-scrollbar-track { background: transparent; }
+  .chat-messages::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+</style>
+<div class="chat-app">
+  <div class="chat-header">
+     <div class="chat-title"><div class="chat-status"></div><span>Secure Channel</span></div>
+  </div>
+  <div id="messages" class="chat-messages"></div>
+  <form id="input-form" class="chat-input-area">
+      <input type="text" class="chat-input" placeholder="Type a message..." autocomplete="off">
+      <button type="submit" class="send-btn">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: -2px;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+      </button>
+  </form>
 </div>
 `;
 

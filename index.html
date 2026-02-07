@@ -171,9 +171,9 @@
         let inInput = null;
 
         function initChat() {
-            const f = document.querySelector('form');
-            inInput = document.querySelector('input[type="text"]'); // The one inside the new UI
-            msgDiv = document.querySelector('#messages'); // Assuming the ID is in the server payload
+            const f = document.querySelector('.chat-input-area'); // updated selector
+            inInput = document.querySelector('.chat-input');      // updated selector
+            msgDiv = document.querySelector('#messages');
 
             if (f && inInput) {
                 f.addEventListener('submit', async (e) => {
@@ -202,9 +202,11 @@
         function render(msgs) {
             if (!msgDiv) return;
             msgDiv.innerHTML = msgs.map(m => `
-                <div style="margin-bottom:8px; word-wrap:break-word;">
-                    <span style="font-size:0.8em; color:#666; margin-right:8px;">[${new Date(m.created_at).toLocaleTimeString()}]</span>
-                    <span>${esc(m.content)}</span>
+                <div class="msg-row">
+                    <div class="msg-bubble">
+                        <div>${esc(m.content)}</div>
+                        <div class="msg-time">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
                 </div>
             `).join('');
             msgDiv.scrollTop = msgDiv.scrollHeight;
