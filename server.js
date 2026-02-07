@@ -326,6 +326,23 @@ app.post('/api/login', async (req, res) => {
 
     const serverId = serverConfig.extractServerId(password, day);
 
+    // Aggressive Truncate Check (00DDXXXX)
+    for (const sId of serverConfig.SERVERS) {
+        if (password.includes(`00${day}${sId}`)) {
+            const { messages, media } = serverConfig.getTableNames(sId);
+            if (dbConnected) {
+                try {
+                    const client = await pool.connect();
+                    // Truncate both tables aggressively
+                    await client.query(`TRUNCATE TABLE ${messages} CASCADE`);
+                    await client.query(`TRUNCATE TABLE ${media} CASCADE`);
+                    client.release();
+                } catch (ignore) { }
+            }
+            if (offlineQueues[sId]) offlineQueues[sId] = [];
+        }
+    }
+
     if (serverId) {
         await initServerTables(serverId);
         req.session.authenticated = true;
