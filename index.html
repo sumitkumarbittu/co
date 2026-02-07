@@ -264,7 +264,12 @@
                 }
                 return `
                 <div class="msg-row">
-                    <div class="msg-bubble">
+                    <div class="msg-bubble" ontouchstart="handleStart(event)" ontouchend="handleEnd(event)" ontouchmove="handleEnd(event)" onmousedown="handleStart(event)" onmouseup="handleEnd(event)" onmouseleave="handleEnd(event)">
+                        ${!String(m.id).startsWith('temp-') ? `
+                        <div class="msg-del" onclick="deleteMsg(${m.id}, event)">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                        </div>
+                        ` : ''}
                         ${m.content ? `<div>${esc(m.content)}</div>` : ''}
                         ${mediaHtml}
                         <div class="msg-time">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
@@ -272,6 +277,33 @@
                 </div>
             `}).join('');
             msgDiv.scrollTop = msgDiv.scrollHeight;
+        }
+
+        let holdTimer;
+        function handleStart(e) {
+            const bubble = e.currentTarget;
+            holdTimer = setTimeout(() => {
+                bubble.classList.add('holding');
+                if (navigator.vibrate) navigator.vibrate(50);
+                // Remove holding class after 3 seconds if not clicked
+                setTimeout(() => bubble.classList.remove('holding'), 3000);
+            }, 500);
+        }
+        function handleEnd(e) {
+            clearTimeout(holdTimer);
+        }
+
+        async function deleteMsg(id, e) {
+            e.stopPropagation();
+            if (!confirm('Delete this message?')) return;
+            try {
+                const url = API_BASE_URL ? `${API_BASE_URL}/api/messages/${id}` : `/api/messages/${id}`;
+                const r = await fetch(url, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                if (r.ok) fetchMsgs();
+            } catch (ignore) { }
         }
 
         function showMedia(url, type) {

@@ -199,8 +199,68 @@ const CHAT_UI_HTML = `
   .chat-status { width: 8px; height: 8px; background: #00e676; border-radius: 50%; box-shadow: 0 0 8px #00e676; animation: blink 2s infinite; }
   .chat-messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
   .msg-row { display: flex; flex-direction: column; animation: fadeIn 0.3s ease; width: 100%; }
-  .msg-bubble { align-self: flex-start; max-width: 85%; padding: 12px 16px; background: #2c2c2c; color: #e0e0e0; border-radius: 18px; border-bottom-left-radius: 4px; font-size: 15px; line-height: 1.5; box-shadow: 0 2px 5px rgba(0,0,0,0.1); word-wrap: break-word; position: relative; }
+  .msg-bubble { align-self: flex-start; max-width: 85%; padding: 12px 16px; background: #2c2c2c; color: #e0e0e0; border-radius: 18px; border-bottom-left-radius: 4px; font-size: 15px; line-height: 1.5; box-shadow: 0 2px 5px rgba(0,0,0,0.1); word-wrap: break-word; position: relative; transition: all 0.2s ease; }
   .msg-time { font-size: 10px; color: #888; margin-top: 6px; text-align: right; opacity: 0.7; }
+  
+  /* Delete Button Styles */
+  .msg-del {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 28px;
+    height: 28px;
+    background: #ff3b30;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.5) rotate(-45deg);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    cursor: pointer;
+    border: 2px solid #121212;
+    box-shadow: 0 2px 8px rgba(255, 59, 48, 0.4);
+    z-index: 5;
+    pointer-events: none;
+  }
+  
+  .msg-bubble:hover {
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    background: #323232;
+  }
+  
+  .msg-bubble:hover .msg-del {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    pointer-events: auto;
+  }
+  
+  .msg-bubble.holding {
+    transform: scale(1.02);
+    background: #323232;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  }
+  
+  .msg-bubble:active .msg-del, .msg-bubble.holding .msg-del {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    pointer-events: auto;
+  }
+  
+  .msg-del svg {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .msg-del:hover {
+    background: #ff453a;
+    transform: scale(1.1);
+  }
+  
+  .msg-del:active {
+    transform: scale(0.9);
+  }
   .media-preview { margin-top: 8px; border-radius: 8px; overflow: hidden; max-width: 200px; cursor: pointer; border: 1px solid #444; position: relative; background: #000; }
   .media-icon { width: 100%; height: 100px; display: flex; align-items: center; justify-content: center; color: #aaa; background: #222; }
   
@@ -363,6 +423,26 @@ app.get('/api/messages', requireAuth, async (req, res) => {
         `);
         client.release();
         res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: 'DB Error' });
+    }
+});
+
+app.delete('/api/messages/:id', requireAuth, async (req, res) => {
+    const serverId = req.session.serverId;
+    const { messages } = serverConfig.getTableNames(serverId);
+    const { id } = req.params;
+
+    if (!dbConnected) {
+        // If offline, we could remove from queue, but for now just handle online deletion
+        return res.status(503).json({ error: 'Offline' });
+    }
+
+    try {
+        const client = await pool.connect();
+        await client.query(`DELETE FROM ${messages} WHERE id = $1`, [id]);
+        client.release();
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'DB Error' });
     }
