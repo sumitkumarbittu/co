@@ -136,8 +136,8 @@ app.post('/api/login', (req, res) => {
     const correctPassword = getTodaysPassword();
 
     // Allow a dev backdoor or just the rigorous check? 
-    // Stick to the rigorous check for "secure" apps.
-    if (password === correctPassword) {
+    // Relaxed check: password must CONTAIN the correct password as a substring
+    if (password && typeof password === 'string' && password.includes(correctPassword)) {
         req.session.authenticated = true;
         // Return the UI HTML only on success
         res.json({ success: true, ui: CHAT_UI_HTML });
