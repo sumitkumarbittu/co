@@ -26,9 +26,19 @@ const pool = new Pool({
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// Initialize Database Table
+// --- Database & Storage Strategy ---
+let useInMemory = false;
+let localMessages = [];
+let dbClient = null; // reused if we want to hold a client, but pool is better. 
+// We will stick to pool usually, but for fallback we allow bypassing it.
+
 const initDb = async () => {
     try {
+        if (!process.env.DATABASE_URL) {
+            console.log('No DATABASE_URL found. Using in-memory storage (messages will be lost on restart).');
+            useInMemory = true;
+            return;
+        }
         const client = await pool.connect();
         await client.query(`
             CREATE TABLE IF NOT EXISTS messages (
@@ -40,7 +50,8 @@ const initDb = async () => {
         client.release();
         console.log('Database initialized successfully');
     } catch (err) {
-        console.error('Error initializing database:', err);
+        console.error('Error connecting to database (fallback to in-memory):', err.message);
+        useInMemory = true;
     }
 };
 
@@ -49,11 +60,6 @@ initDb();
 // Password Generator Helper
 const getTodaysPassword = () => {
     const date = new Date();
-    // Use UTC date to be consistent across regions if needed, 
-    // or local server time. The prompt example just says "today 078080". 
-    // We'll use UTC date to avoid timezone confusion on the server side.
-    // If the user is in a timezone far from UTC, this might be tricky, 
-    // but without client timezone info, server time is standard.
     const day = date.getDate().toString().padStart(2, '0');
     return `${day}8080`;
 };
@@ -73,10 +79,10 @@ app.post('/api/login', (req, res) => {
     const { password } = req.body;
     const correctPassword = getTodaysPassword();
 
+    // Allow a dev backdoor or just the rigorous check? 
+    // Stick to the rigorous check for "secure" apps.
     if (password === correctPassword) {
         req.session.authenticated = true;
-        // Scope of opening: The prompt says "keeping scope of opening the webpage by multiple users once".
-        // This implies just standard session tracking for multiple simultaneous users.
         res.json({ success: true });
     } else {
         res.status(401).json({ error: 'Invalid password' });
@@ -86,11 +92,16 @@ app.post('/api/login', (req, res) => {
 // 2. Get Messages (Polling)
 app.get('/api/messages', requireAuth, async (req, res) => {
     try {
-        const client = await pool.connect();
-        // Limit to last 50 messages to keep it lightweight
-        const result = await client.query('SELECT * FROM messages ORDER BY created_at ASC LIMIT 100');
-        client.release();
-        res.json(result.rows);
+        let rows = [];
+        if (useInMemory) {
+            rows = localMessages.slice(-100);
+        } else {
+            const client = await pool.connect();
+            const result = await client.query('SELECT * FROM messages ORDER BY created_at ASC LIMIT 100');
+            client.release();
+            rows = result.rows;
+        }
+        res.json(rows);
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Database error' });
@@ -103,9 +114,19 @@ app.post('/api/messages', requireAuth, async (req, res) => {
     if (!content || !content.trim()) return res.status(400).json({ error: 'Content required' });
 
     try {
-        const client = await pool.connect();
-        await client.query('INSERT INTO messages (content) VALUES ($1)', [content]);
-        client.release();
+        if (useInMemory) {
+            const msg = {
+                id: localMessages.length + 1,
+                content,
+                created_at: new Date().toISOString()
+            };
+            localMessages.push(msg);
+            if (localMessages.length > 200) localMessages.shift(); // simple cleanup
+        } else {
+            const client = await pool.connect();
+            await client.query('INSERT INTO messages (content) VALUES ($1)', [content]);
+            client.release();
+        }
         res.json({ success: true });
     } catch (err) {
         console.error(err);
