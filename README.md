@@ -19,38 +19,36 @@ Format: `DD8080`
 
 **Example**: On the 7th of the month, the password is `078080`.
 
-## Deployment on Render
+## Deployment
 
-This application is ready for deployment on render.com (Free Tier).
+This app is designed to be split into two parts (optional) or run as a monolith on Render.
 
-### Prerequisites
+### Option 1: Monolith on Render (Easiest)
+1.  **Deploy to Render**:
+    *   Connect repo.
+    *   Runtime: `Docker`.
+    *   Env Vars: `DATABASE_URL` (from Render Postgres), `SESSION_SECRET`.
+2.  **Access**: Go to your Render URL.
 
-1.  A [Render](https://render.com) account.
-2.  Connect your GitHub repository containing this code to Render.
-
-### Steps
-
-1.  **Create a PostgreSQL Database**:
-    *   Go to New + -> PostgreSQL.
-    *   Name it `chat-db`.
-    *   Choose the Free Plan.
-    *   After creation, copy the **Internal Database URL**.
-
-2.  **Create a Web Service**:
-    *   Go to New + -> Web Service.
-    *   Connect this repository.
-    *   **Runtime**: `Docker`.
-    *   **Instance Type**: Free.
-    *   **Environment Variables**: Add the following:
-        *   `DATABASE_URL`: Paste the Internal Database URL from step 1.
-        *   `SESSION_SECRET`: (Optional) A random string for session security.
-    *   Click **Create Web Service**.
+### Option 2: Frontend on GitHub Pages + Backend on Render
+1.  **Backend (Render)**:
+    *   Same as Option 1.
+    *   **Important**: Copy your Render Web Service URL (e.g., `https://my-app.onrender.com`).
+2.  **Frontend (GitHub Pages)**:
+    *   Edit `index.html` in your repo:
+        *   Find `const RENDER_BACKEND_URL = ...`
+        *   Replace with your Render URL.
+    *   Go to GitHub Repo Settings -> Pages.
+    *   Source: `Deploy from a branch`.
+    *   Branch: `main`, Folder: `/(root)`.
+    *   Save.
+3.  **Access**: Go to your GitHub Pages URL (e.g., `https://username.github.io/repo`).
 
 ### Local Development
 
 1.  Clone the repository.
 2.  Install dependencies: `npm install`.
-3.  Set up a local Postgres database.
+3.  Set up a local Postgres database (or run without for in-memory mode).
 4.  Run with environment variables:
     ```bash
     export DATABASE_URL=postgres://user:pass@localhost:5432/dbname

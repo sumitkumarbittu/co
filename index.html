@@ -139,6 +139,19 @@
     <div id="status">Disconnected</div>
 
     <script>
+        // --- Configuration ---
+        // UPDATE THIS URL AFTER DEPLOYING TO RENDER
+        // Example: 'https://my-cool-chat-app.onrender.com'
+        // If left empty, it assumes the backend is on the same origin (local or Render serving static)
+        const RENDER_BACKEND_URL = 'https://YOUR-RENDER-APP-NAME.onrender.com';
+
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        // If on GitHub Pages (or other static host), use the Render URL.
+        // If served by the Express app itself (same origin), use relative path.
+        const API_BASE_URL = (isLocal || window.location.origin.includes('github.io')) && !isLocal ? RENDER_BACKEND_URL : '';
+
+        console.log('API Base:', API_BASE_URL || 'Relative Path');
+
         // --- State Management ---
         const INACTIVITY_LIMIT = 5000; // 5 seconds
         let inactivityTimer;
@@ -208,10 +221,14 @@
 
         async function attemptLogin(password) {
             try {
-                const res = await fetch('/api/login', {
+                // Determine effective URL
+                const url = API_BASE_URL ? `${API_BASE_URL}/api/login` : '/api/login';
+
+                const res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password })
+                    body: JSON.stringify({ password }),
+                    credentials: 'include' // Important for cross-site cookies
                 });
 
                 if (res.ok) {
@@ -231,7 +248,11 @@
         async function fetchMessages() {
             if (isLocked) return;
             try {
-                const res = await fetch('/api/messages');
+                const url = API_BASE_URL ? `${API_BASE_URL}/api/messages` : '/api/messages';
+
+                const res = await fetch(url, {
+                    credentials: 'include'
+                });
                 if (res.status === 401) {
                     // Session expired or invalid
                     lockScreen();
@@ -282,10 +303,13 @@
             if (!content) return;
 
             try {
-                await fetch('/api/messages', {
+                const url = API_BASE_URL ? `${API_BASE_URL}/api/messages` : '/api/messages';
+
+                await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content })
+                    body: JSON.stringify({ content }),
+                    credentials: 'include'
                 });
                 messageInput.value = '';
                 fetchMessages();

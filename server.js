@@ -9,15 +9,30 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
+app.set('trust proxy', 1); // crucial for secure cookies on Render/Heroku
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow all origins, but reflected for credentials support
+        callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(bodyParser.json());
-app.use(express.static('public'));
+// app.use(express.static('.')); // REMOVED for security: do not expose server code
+
 
 // Session configuration
 app.use(cookieSession({
     name: 'session',
     keys: [process.env.SESSION_SECRET || 'secret_key_123'],
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'none', // Required for cross-origin (GH Pages -> Render)
+    secure: true,     // Required for sameSite: 'none'
+    httpOnly: true
 }));
 
 // PostgreSQL Connection
@@ -142,7 +157,7 @@ app.post('/api/logout', (req, res) => {
 
 // Serve the main page
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(port, () => {
