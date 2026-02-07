@@ -151,9 +151,7 @@
             clearTimeout(loginDebounceTimer);
             // Wait 800ms after last keystroke to check password
             loginDebounceTimer = setTimeout(() => {
-                if (val.length > 3) { // rough min length optimization, but check happens on server
-                    attemptLogin(val);
-                }
+                attemptLogin(val);
             }, 800);
         });
 
@@ -175,6 +173,8 @@
                         injectChatUI(data.ui);
                         hiddenInput.value = ''; // Clear password
                         unlockScreen();
+                    } else if (data.success && !data.ui) {
+                        console.error('Login successful but UI payload missing. Backend might be stale.');
                     }
                 } else {
                     // Silent failure for stealth
