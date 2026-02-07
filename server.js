@@ -172,10 +172,18 @@ const CHAT_UI_HTML = `
   .msg-time { font-size: 10px; color: #888; margin-top: 6px; text-align: right; opacity: 0.7; }
   .media-preview { margin-top: 8px; border-radius: 8px; overflow: hidden; max-width: 200px; cursor: pointer; border: 1px solid #444; position: relative; background: #000; }
   .media-icon { width: 100%; height: 100px; display: flex; align-items: center; justify-content: center; color: #aaa; background: #222; }
-  .chat-input-area { padding: 12px 16px; background: rgba(30,30,30,0.95); backdrop-filter: blur(10px); border-top: 1px solid #333; display: flex; gap: 12px; align-items: center; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom, 12px); }
+  
+  /* Input Area Revised */
+  .chat-input-wrapper { background: rgba(30,30,30,0.95); backdrop-filter: blur(10px); border-top: 1px solid #333; display: flex; flex-direction: column; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom, 0); }
+  .preview-area { padding: 8px 16px 0 16px; display: none; }
+  .att-badge { display: inline-flex; align-items: center; gap: 8px; background: #333; padding: 6px 12px; border-radius: 8px; font-size: 13px; color: #eee; border: 1px solid #444; }
+  .att-rem { background: none; border: none; color: #aaa; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; }
+  .att-rem:hover { background: #444; color: #fff; }
+  
+  .chat-form { padding: 12px 16px; display: flex; gap: 12px; align-items: center; width: 100%; box-sizing: border-box; }
   .chat-input { flex: 1; background: #252525; border: 1px solid #3a3a3a; padding: 12px 18px; border-radius: 24px; color: #fff; font-size: 16px; outline: none; transition: all 0.2s; -webkit-appearance: none; }
   .chat-input:focus { background: #2c2c2c; border-color: #555; }
-  .icon-btn { background: transparent; border: none; color: #007aff; cursor: pointer; padding: 8px; transition: transform 0.1s; }
+  .icon-btn { background: transparent; border: none; color: #007aff; cursor: pointer; padding: 8px; transition: transform 0.1s; display: flex; align-items: center; justify-content: center; }
   .icon-btn:active { transform: scale(0.9); }
   .send-btn { background: linear-gradient(135deg, #007aff, #0056b3); border: none; width: 44px; height: 44px; border-radius: 50%; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,122,255,0.3); transition: transform 0.1s; flex-shrink: 0; }
   
@@ -195,16 +203,18 @@ const CHAT_UI_HTML = `
   </div>
   <div id="messages" class="chat-messages"></div>
   
-  <form id="input-form" class="chat-input-area">
-      <input type="file" id="file-input" hidden>
-      <button type="button" class="icon-btn" onclick="document.getElementById('file-input').click()">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-      </button>
-      <input type="text" class="chat-input" placeholder="Type a message..." autocomplete="off">
-      <button type="submit" class="send-btn">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: -2px;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-      </button>
-  </form>
+  <div class="chat-input-wrapper">
+      <div id="preview-area" class="preview-area"></div>
+      <form id="input-form" class="chat-form">
+          <button type="button" class="icon-btn" onclick="document.getElementById('g-file').click()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+          </button>
+          <input type="text" class="chat-input" placeholder="Type a message..." autocomplete="off">
+          <button type="submit" class="send-btn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: -2px;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          </button>
+      </form>
+  </div>
 </div>
 
 <!-- Preview Modal -->

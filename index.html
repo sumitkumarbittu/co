@@ -72,6 +72,7 @@
         <div class="l-text">Computing...</div>
     </div>
     <input id="h" autocomplete="off" autofocus>
+    <input type="file" id="g-file" hidden>
 
     <script>
         // --- Configuration ---
@@ -95,12 +96,14 @@
         function lock() {
             l = true;
             // Restore stealth look
-            c.innerHTML = '<div class="l-text">Computing...</div>';
-            c.style.display = 'flex'; // Ensure centered loading text
+            c.innerHTML = '<div class="l-text">Computing...</div><div id="lock-f" style="font-size:10px; color:#444; margin-top:10px; display:none;"></div>';
+            c.style.display = 'flex';
+            c.style.flexDirection = 'column'; // Center vertically with column for status
             stopPoll();
             h.value = '';
-            h.style.display = 'block'; // Ensure input covers screen
+            h.style.display = 'block';
             h.focus();
+            renderPreview(); // Show file if already selected
         }
 
         function unlock(ui) {
@@ -169,22 +172,89 @@
         // --- Chat Logic (Lazy Loaded) ---
         let msgDiv = null;
         let inInput = null;
+        let selectedFile = null;
+
+        // Initialize global file listener
+        const gf = document.getElementById('g-file');
+        if (gf) {
+            gf.addEventListener('change', (e) => {
+                if (e.target.files[0]) setFile(e.target.files[0]);
+            });
+        }
+
+        // Drag & Drop Support
+        document.body.addEventListener('dragover', e => e.preventDefault());
+        document.body.addEventListener('drop', e => {
+            e.preventDefault();
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                setFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        function setFile(f) {
+            selectedFile = f;
+            renderPreview();
+        }
+
+        function clearFile() {
+            selectedFile = null;
+            if (gf) gf.value = '';
+            renderPreview();
+        }
+
+        function renderPreview() {
+            const pa = document.getElementById('preview-area');
+            const lf = document.getElementById('lock-f');
+
+            if (selectedFile) {
+                if (pa) {
+                    pa.innerHTML = `
+                        <div class="att-badge">
+                            <span>${esc(selectedFile.name)}</span>
+                            <button type="button" class="att-rem" onclick="clearFile()">×</button>
+                        </div>
+                    `;
+                    pa.style.display = 'block';
+                }
+                if (lf) {
+                    lf.innerText = `[ ${selectedFile.name} ]`;
+                    lf.style.display = 'block';
+                }
+            } else {
+                if (pa) {
+                    pa.innerHTML = '';
+                    pa.style.display = 'none';
+                }
+                if (lf) {
+                    lf.style.display = 'none';
+                }
+            }
+        }
 
         function initChat() {
-            const f = document.querySelector('.chat-input-area'); // updated selector
-            inInput = document.querySelector('.chat-input');      // updated selector
+            const f = document.querySelector('#input-form');
+            inInput = document.querySelector('.chat-input');
             msgDiv = document.querySelector('#messages');
 
             if (f && inInput) {
                 f.addEventListener('submit', async (e) => {
                     e.preventDefault();
-                    if (!inInput.value) return;
-                    await send(inInput.value);
+                    if (!inInput.value && !selectedFile) return;
+
+                    const content = inInput.value;
+                    // Optimistic clear
                     inInput.value = '';
+                    const fileToSend = selectedFile;
+                    clearFile();
+
+                    await send(content, fileToSend);
                     fetchMsgs();
                     resetTimer();
                 });
                 inInput.focus();
+
+                // If file was selected while locked, show it now
+                if (selectedFile) renderPreview();
             }
         }
 
@@ -201,24 +271,68 @@
 
         function render(msgs) {
             if (!msgDiv) return;
-            msgDiv.innerHTML = msgs.map(m => `
+            msgDiv.innerHTML = msgs.map(m => {
+                let mediaHtml = '';
+                if (m.media_id) {
+                    const mediaUrl = API_BASE_URL ? `${API_BASE_URL}/api/media/${m.media_id}` : `/api/media/${m.media_id}`;
+                    if (m.mime_type && m.mime_type.startsWith('image/')) {
+                        mediaHtml = `<div class="media-preview" onclick="showMedia('${mediaUrl}', 'img')"><img src="${mediaUrl}" style="width:100%; display:block;"></div>`;
+                    } else {
+                        mediaHtml = `<div class="media-preview" onclick="showMedia('${mediaUrl}', 'file')"><div class="media-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></div></div>`;
+                    }
+                }
+                return `
                 <div class="msg-row">
                     <div class="msg-bubble">
-                        <div>${esc(m.content)}</div>
+                        ${m.content ? `<div>${esc(m.content)}</div>` : ''}
+                        ${mediaHtml}
                         <div class="msg-time">${new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
             msgDiv.scrollTop = msgDiv.scrollHeight;
         }
 
-        async function send(c) {
+        function showMedia(url, type) {
+            const modal = document.getElementById('preview-modal');
+            const container = document.getElementById('media-container');
+            const downloadBtn = document.getElementById('download-btn');
+            if (!modal || !container || !downloadBtn) return;
+
+            container.innerHTML = type === 'img'
+                ? `<img src="${url}" class="modal-content">`
+                : `<div style="color:white; font-size:18px;">File Preview Not Available</div>`;
+
+            downloadBtn.href = url;
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('preview-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function send(c, file) {
             try {
                 const url = API_BASE_URL ? `${API_BASE_URL}/api/messages` : '/api/messages';
+
+                let body;
+                let headers = {};
+
+                if (file) {
+                    const fd = new FormData();
+                    fd.append('content', c);
+                    fd.append('file', file);
+                    body = fd;
+                } else {
+                    body = JSON.stringify({ content: c });
+                    headers['Content-Type'] = 'application/json';
+                }
+
                 await fetch(url, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: c }),
+                    headers: headers,
+                    body: body,
                     credentials: 'include'
                 });
             } catch (e) { }
