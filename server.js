@@ -1,4 +1,5 @@
 const express = require('express');
+require('dotenv').config(); // Load environment variables
 const { Pool } = require('pg');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -42,9 +43,11 @@ const upload = multer({
 });
 
 // --- Database & Queue Strategy ---
+// Aggressive SSL: Force SSL unless explicitly on localhost
+const isLocalDb = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1');
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: isProduction ? { rejectUnauthorized: false } : false
+    ssl: isLocalDb ? false : { rejectUnauthorized: false }
 });
 
 // Offline Queue
