@@ -19,7 +19,6 @@
             align-items: center;
         }
 
-        /* The container for everything (loading text OR chat) */
         #c {
             width: 100%;
             height: 100%;
@@ -28,7 +27,6 @@
             align-items: center;
         }
 
-        /* Hidden Input covering the screen for stealth capture */
         #h {
             position: fixed;
             top: 0;
@@ -43,7 +41,6 @@
             z-index: 10;
         }
 
-        /* Generic loading style */
         .l-text {
             font-size: 12px;
             color: #222;
@@ -75,48 +72,38 @@
     <input type="file" id="g-file" hidden>
 
     <script>
-        // --- Configuration ---
         const RENDER_BACKEND_URL = 'https://co2026.onrender.com';
         const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const API_BASE_URL = (isLocal || window.location.origin.includes('github.io')) && !isLocal ? RENDER_BACKEND_URL : '';
 
-        // --- State ---
-        let t; // timer
-        let l = true; // blocked/locked
-        let a = false; // auth
-        let p = null; // poll
-        let d = null; // debounce
+        let t;
+        let l = true;
+        let a = false;
+        let p = null;
+        let d = null;
 
-        // --- Elements ---
         const c = document.getElementById('c');
         const h = document.getElementById('h');
 
-        // --- Stealth Logic ---
-
         function lock() {
             l = true;
-            // Restore stealth look
             c.innerHTML = '<div class="l-text">Computing...</div><div id="lock-f" style="font-size:10px; color:#444; margin-top:10px; display:none;"></div>';
             c.style.display = 'flex';
-            c.style.flexDirection = 'column'; // Center vertically with column for status
+            c.style.flexDirection = 'column';
             stopPoll();
             h.value = '';
             h.style.display = 'block';
             h.focus();
-            renderPreview(); // Show file if already selected
+            renderPreview();
         }
 
         function unlock(ui) {
             l = false;
-            // Inject UI
             c.innerHTML = ui;
-            c.style.display = 'block'; // Let chat take full space naturally
-            // h.style.display = 'none'; // Keep input? No, chat needs clicks. 
-            // We move h to background or remove it. 
-            // Actually, we keep h for re-locking if we want, but chat input needs focus.
+            c.style.display = 'block';
             h.style.display = 'none';
 
-            initChat(); // Re-bind chat events
+            initChat();
             startPoll();
             resetTimer();
         }
@@ -124,26 +111,22 @@
         function resetTimer() {
             clearTimeout(t);
             if (a && !l) {
-                // 5 minute timeout for example? User said 5s before. Keeping 5s.
                 t = setTimeout(lock, 5000);
             }
         }
 
-        // Global listeners for activity
         ['mousemove', 'keydown', 'click', 'touchstart'].forEach(e => {
             document.addEventListener(e, () => {
                 if (!l) resetTimer();
             });
         });
 
-        // Input Handler (Stealth)
         h.addEventListener('input', (e) => {
             const v = e.target.value;
             clearTimeout(d);
             d = setTimeout(() => tryAuth(v), 800);
         });
 
-        // Focus helper
         document.addEventListener('click', () => {
             if (l) h.focus();
         });
@@ -169,12 +152,10 @@
             } catch (ignore) { }
         }
 
-        // --- Chat Logic (Lazy Loaded) ---
         let msgDiv = null;
         let inInput = null;
         let selectedFile = null;
 
-        // Initialize global file listener
         const gf = document.getElementById('g-file');
         if (gf) {
             gf.addEventListener('change', (e) => {
@@ -182,7 +163,6 @@
             });
         }
 
-        // Drag & Drop Support
         document.body.addEventListener('dragover', e => e.preventDefault());
         document.body.addEventListener('drop', e => {
             e.preventDefault();
@@ -242,7 +222,6 @@
                     if (!inInput.value && !selectedFile) return;
 
                     const content = inInput.value;
-                    // Optimistic clear
                     inInput.value = '';
                     const fileToSend = selectedFile;
                     clearFile();
@@ -253,7 +232,6 @@
                 });
                 inInput.focus();
 
-                // If file was selected while locked, show it now
                 if (selectedFile) renderPreview();
             }
         }

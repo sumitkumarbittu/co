@@ -18,6 +18,7 @@ The platform is designed for users who require a high degree of privacy without 
 ### 🟢 1. Triple-Layer Stealth & Security
 - **Invisible Entry**: Launches to a generic "Computing..." screen. No login forms or buttons are visible to casual observers.
 - **Dynamic IST Password**: Authentication is synchronized with **Indian Standard Time (IST)**. Even if local time is changed on the device, only the IST date (`DD8080`) will grant access.
+- **Multi-Server Architecture**: Support for multiple isolated servers using pattern `DDXXXX` where `XXXX` is a 4-digit server ID. Each server has completely separate message and media storage.
 - **Auto-Inactivity Wipe**: The application automatically "re-locks" and wipes sensitive UI data after 5 seconds of inactivity, returning to its stealth state.
 
 ### 📎 2. Advanced Attachment Engine
@@ -86,8 +87,29 @@ graph TD
 | `PORT` | Listening port for the application | `3000` |
 | `DATABASE_URL` | PostgreSQL connection string | *Required* |
 | `SESSION_SECRET` | Secret key for encrypted cookies | `secret_key_123` |
-| `TABLE_MSG` | Custom name for the message table | `messages_v2` |
-| `TABLE_MEDIA` | Custom name for binary storage | `media_storage_v2` |
+
+### 🔀 Multi-Server Setup
+
+The application supports multiple isolated servers. Configure available servers in `config.js`:
+
+```javascript
+const SERVERS = ['1234', '5678', '9999'];
+```
+
+**Password Format**: `DDXXXX`
+- `DD` = Current day (IST)
+- `XXXX` = 4-digit server ID from the configured list
+
+**Example**: On February 8th:
+- `081234` → Access server 1234
+- `085678` → Access server 5678
+- `089999` → Access server 9999
+
+Each server maintains completely isolated:
+- Message table: `messages_XXXX`
+- Media table: `media_XXXX`
+
+See [MULTI_SERVER_GUIDE.md](./MULTI_SERVER_GUIDE.md) for detailed setup instructions.
 
 ---
 

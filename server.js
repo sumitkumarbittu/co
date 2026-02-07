@@ -6,14 +6,13 @@ const bodyParser = require('body-parser');
 const cookieSession = require('cookie-session');
 const path = require('path');
 const multer = require('multer');
+const serverConfig = require('./config');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// --- Config ---
-// Variable Table Names
-const TABLE_MSG = process.env.TABLE_MSG || 'messages_v2';
-const TABLE_MEDIA = process.env.TABLE_MEDIA || 'media_storage_v2';
+// --- Multi-Server Config ---
+// Each server has its own tables based on server ID
 
 // Middleware
 app.set('trust proxy', 1);
@@ -50,22 +49,28 @@ const pool = new Pool({
     ssl: isLocalDb ? false : { rejectUnauthorized: false }
 });
 
-// Offline Queue
-let offlineQueue = [];
+// Offline Queue - now per server
+let offlineQueues = {}; // { serverId: [...tasks] }
 let dbConnected = false;
+let initializedServers = new Set(); // Track which server tables are initialized
 
-// Init DB
-const initDb = async () => {
+// Initialize tables for a specific server
+const initServerTables = async (serverId) => {
     if (!process.env.DATABASE_URL) {
-        console.log('No DATABASE_URL. Running in offline/queue mode.');
-        return;
+        return false;
+    }
+
+    if (initializedServers.has(serverId)) {
+        return true; // Already initialized
     }
 
     try {
+        const { messages, media } = serverConfig.getTableNames(serverId);
         const client = await pool.connect();
-        // Media Table
+
+        // Media Table for this server
         await client.query(`
-            CREATE TABLE IF NOT EXISTS ${TABLE_MEDIA} (
+            CREATE TABLE IF NOT EXISTS ${media} (
                 id SERIAL PRIMARY KEY,
                 filename TEXT,
                 mime_type TEXT,
@@ -73,37 +78,62 @@ const initDb = async () => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        // Messages Table
+
+        // Messages Table for this server
         await client.query(`
-            CREATE TABLE IF NOT EXISTS ${TABLE_MSG} (
+            CREATE TABLE IF NOT EXISTS ${messages} (
                 id SERIAL PRIMARY KEY,
                 content TEXT,
-                media_id INTEGER REFERENCES ${TABLE_MEDIA}(id),
+                media_id INTEGER REFERENCES ${media}(id),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+
+        client.release();
+        initializedServers.add(serverId);
+        return true;
+    } catch (err) {
+        return false;
+    }
+};
+
+// Init DB connection
+const initDb = async () => {
+    if (!process.env.DATABASE_URL) {
+        return;
+    }
+
+    try {
+        const client = await pool.connect();
         client.release();
         dbConnected = true;
-        console.log(`Database tables (${TABLE_MSG}, ${TABLE_MEDIA}) initialized.`);
-        processQueue(); // Try flushing immediately
+
+        // Initialize all configured servers
+        for (const serverId of serverConfig.SERVERS) {
+            await initServerTables(serverId);
+        }
+
+        // Process queues for all servers
+        for (const serverId of serverConfig.SERVERS) {
+            processQueue(serverId);
+        }
     } catch (err) {
-        console.error('DB Connection Failed:', err.message);
         dbConnected = false;
     }
 };
 
 initDb();
 
-// Queue Processor
-const processQueue = async () => {
-    if (offlineQueue.length === 0 || !dbConnected) return;
+// Queue Processor - per server
+const processQueue = async (serverId) => {
+    if (!offlineQueues[serverId] || offlineQueues[serverId].length === 0 || !dbConnected) return;
 
-    console.log(`Flushing ${offlineQueue.length} items from queue...`);
+    const { messages, media } = serverConfig.getTableNames(serverId);
     const client = await pool.connect();
 
     try {
-        while (offlineQueue.length > 0) {
-            const task = offlineQueue[0]; // Peek
+        while (offlineQueues[serverId].length > 0) {
+            const task = offlineQueues[serverId][0]; // Peek
 
             if (task.type === 'message') {
                 let mediaId = null;
@@ -112,7 +142,7 @@ const processQueue = async () => {
                 if (task.file) {
                     const { buffer, originalname, mimetype } = task.file;
                     const res = await client.query(
-                        `INSERT INTO ${TABLE_MEDIA} (filename, mime_type, data) VALUES ($1, $2, $3) RETURNING id`,
+                        `INSERT INTO ${media} (filename, mime_type, data) VALUES ($1, $2, $3) RETURNING id`,
                         [originalname, mimetype, buffer]
                     );
                     mediaId = res.rows[0].id;
@@ -121,29 +151,30 @@ const processQueue = async () => {
                 }
 
                 await client.query(
-                    `INSERT INTO ${TABLE_MSG} (content, media_id, created_at) VALUES ($1, $2, $3)`,
+                    `INSERT INTO ${messages} (content, media_id, created_at) VALUES ($1, $2, $3)`,
                     [task.content, mediaId, task.created_at]
                 );
             }
 
-            offlineQueue.shift(); // Remove on success
+            offlineQueues[serverId].shift(); // Remove on success
         }
-        console.log('Queue flushed.');
     } catch (err) {
-        console.error('Queue flush error:', err);
         dbConnected = false; // Mark temporarily down
     } finally {
         client.release();
     }
 };
 
-// Periodic Check
+// Periodic Check - process all server queues
 setInterval(async () => {
     if (!dbConnected) {
         // Try reconnecting logic if needed, or initDb
         initDb();
     } else {
-        processQueue();
+        // Process queues for all servers
+        for (const serverId of serverConfig.SERVERS) {
+            processQueue(serverId);
+        }
     }
 }, 10000);
 
@@ -155,7 +186,7 @@ const getTodaysPassword = () => {
 };
 
 const requireAuth = (req, res, next) => {
-    if (req.session && req.session.authenticated) next();
+    if (req.session && req.session.authenticated && req.session.serverId) next();
     else res.status(401).json({ error: 'Unauthorized' });
 };
 
@@ -173,7 +204,6 @@ const CHAT_UI_HTML = `
   .media-preview { margin-top: 8px; border-radius: 8px; overflow: hidden; max-width: 200px; cursor: pointer; border: 1px solid #444; position: relative; background: #000; }
   .media-icon { width: 100%; height: 100px; display: flex; align-items: center; justify-content: center; color: #aaa; background: #222; }
   
-  /* Input Area Revised */
   .chat-input-wrapper { background: rgba(30,30,30,0.95); backdrop-filter: blur(10px); border-top: 1px solid #333; display: flex; flex-direction: column; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom, 0); }
   .preview-area { padding: 8px 16px 0 16px; display: none; }
   .att-badge { display: inline-flex; align-items: center; gap: 8px; background: #333; padding: 6px 12px; border-radius: 8px; font-size: 13px; color: #eee; border: 1px solid #444; }
@@ -187,7 +217,6 @@ const CHAT_UI_HTML = `
   .icon-btn:active { transform: scale(0.9); }
   .send-btn { background: linear-gradient(135deg, #007aff, #0056b3); border: none; width: 44px; height: 44px; border-radius: 50%; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,122,255,0.3); transition: transform 0.1s; flex-shrink: 0; }
   
-  /* Modal */
   .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; justify-content: center; align-items: center; flex-direction: column; }
   .modal-content { max-width: 90%; max-height: 80%; object-fit: contain; box-shadow: 0 0 20px rgba(0,0,0,0.5); transition: transform 0.1s; cursor: grab; }
   .modal-toolbar { display: flex; gap: 20px; margin-top: 20px; z-index: 101; }
@@ -199,7 +228,7 @@ const CHAT_UI_HTML = `
 
 <div class="chat-app">
   <div class="chat-header">
-     <div class="chat-title"><div class="chat-status"></div><span>Secure Channel</span></div>
+     <div class="chat-title"><div class="chat-status"></div><span></span></div>
   </div>
   <div id="messages" class="chat-messages"></div>
   
@@ -209,7 +238,7 @@ const CHAT_UI_HTML = `
           <button type="button" class="icon-btn" onclick="document.getElementById('g-file').click()">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
           </button>
-          <input type="text" class="chat-input" placeholder="Type a message..." autocomplete="off">
+          <input type="text" class="chat-input" placeholder="" autocomplete="off">
           <button type="submit" class="send-btn">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left: -2px;"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
           </button>
@@ -217,25 +246,44 @@ const CHAT_UI_HTML = `
   </div>
 </div>
 
-<!-- Preview Modal -->
 <div id="preview-modal" class="modal-overlay">
     <div id="media-container" style="overflow: auto; display: flex; justify-content: center; align-items: center; width: 100%; height: 80%;">
-        <!-- Dynamic Content -->
     </div>
     <div class="modal-toolbar">
-        <a id="download-btn" class="tool-btn" download>Download</a>
-        <button class="tool-btn" onclick="closeModal()">Close</button>
+        <a id="download-btn" class="tool-btn" download></a>
+        <button class="tool-btn" onclick="closeModal()"></button>
     </div>
 </div>
 `;
 
 // --- Routes ---
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
     const { password } = req.body;
+
+    // Extract server ID from password
+    const serverId = serverConfig.extractServerId(password);
+
+    if (!serverId) {
+        return res.status(401).json({ error: 'Invalid password format' });
+    }
+
+    // Check if server ID is valid
+    if (!serverConfig.isValidServer(serverId)) {
+        return res.status(401).json({ error: 'Invalid server' });
+    }
+
+    // Check if password matches pattern DDXXXX
     const correctPassword = getTodaysPassword();
-    if (password && typeof password === 'string' && password.includes(correctPassword)) {
+    const expectedPassword = correctPassword.slice(0, 2) + serverId; // DD + XXXX
+
+    if (password && typeof password === 'string' && password === expectedPassword) {
+        // Initialize server tables if not already done
+        await initServerTables(serverId);
+
         req.session.authenticated = true;
+        req.session.serverId = serverId;
+
         res.json({ success: true, ui: CHAT_UI_HTML });
     } else {
         res.status(401).json({ error: 'Invalid password' });
@@ -246,6 +294,13 @@ app.post('/api/login', (req, res) => {
 app.post('/api/messages', requireAuth, upload.single('file'), async (req, res) => {
     const { content } = req.body;
     const file = req.file;
+    const serverId = req.session.serverId;
+    const { messages, media } = serverConfig.getTableNames(serverId);
+
+    // Initialize queue for this server if needed
+    if (!offlineQueues[serverId]) {
+        offlineQueues[serverId] = [];
+    }
 
     // Build Task
     const task = {
@@ -268,7 +323,7 @@ app.post('/api/messages', requireAuth, upload.single('file'), async (req, res) =
             // Insert Media first if present
             if (task.file) {
                 const mediaRes = await client.query(
-                    `INSERT INTO ${TABLE_MEDIA} (filename, mime_type, data) VALUES ($1, $2, $3) RETURNING id`,
+                    `INSERT INTO ${media} (filename, mime_type, data) VALUES ($1, $2, $3) RETURNING id`,
                     [task.file.originalname, task.file.mimetype, task.file.buffer]
                 );
                 mediaId = mediaRes.rows[0].id;
@@ -276,27 +331,32 @@ app.post('/api/messages', requireAuth, upload.single('file'), async (req, res) =
 
             // Insert Message
             await client.query(
-                `INSERT INTO ${TABLE_MSG} (content, media_id, created_at) VALUES ($1, $2, $3)`,
+                `INSERT INTO ${messages} (content, media_id, created_at) VALUES ($1, $2, $3)`,
                 [task.content, mediaId, task.created_at]
             );
             client.release();
             res.json({ success: true });
         } catch (err) {
-            console.error('Insert Failed, queueing:', err);
-            offlineQueue.push(task);
+            offlineQueues[serverId].push(task);
             res.json({ success: true, queued: true }); // Fake success for user
         }
     } else {
-        console.log('DB Down, queueing message.');
-        offlineQueue.push(task);
+        offlineQueues[serverId].push(task);
         res.json({ success: true, queued: true });
     }
 });
 
 app.get('/api/messages', requireAuth, async (req, res) => {
+    const serverId = req.session.serverId;
+    const { messages, media } = serverConfig.getTableNames(serverId);
+
+    if (!offlineQueues[serverId]) {
+        offlineQueues[serverId] = [];
+    }
+
     if (!dbConnected) {
         // Return queued messages as "local" preview
-        const queuedMsgs = offlineQueue.map(t => ({
+        const queuedMsgs = offlineQueues[serverId].map(t => ({
             id: 'temp-' + Date.now(),
             content: t.content,
             created_at: t.created_at,
@@ -311,8 +371,8 @@ app.get('/api/messages', requireAuth, async (req, res) => {
         // Join to get media info but NOT data
         const result = await client.query(`
             SELECT m.id, m.content, m.created_at, m.media_id, mm.mime_type 
-            FROM ${TABLE_MSG} m
-            LEFT JOIN ${TABLE_MEDIA} mm ON m.media_id = mm.id
+            FROM ${messages} m
+            LEFT JOIN ${media} mm ON m.media_id = mm.id
             ORDER BY m.created_at ASC LIMIT 100
         `);
         client.release();
@@ -324,10 +384,13 @@ app.get('/api/messages', requireAuth, async (req, res) => {
 
 // Lazy Load Media
 app.get('/api/media/:id', requireAuth, async (req, res) => {
+    const serverId = req.session.serverId;
+    const { media } = serverConfig.getTableNames(serverId);
+
     if (!dbConnected) return res.status(503).send('Offline');
     try {
         const client = await pool.connect();
-        const result = await client.query(`SELECT data, mime_type, filename FROM ${TABLE_MEDIA} WHERE id = $1`, [req.params.id]);
+        const result = await client.query(`SELECT data, mime_type, filename FROM ${media} WHERE id = $1`, [req.params.id]);
         client.release();
 
         if (result.rows.length > 0) {
@@ -350,6 +413,10 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/health', (req, res) => {
     const memory = process.memoryUsage();
+
+    // Calculate total queue size across all servers
+    const totalQueueSize = Object.values(offlineQueues).reduce((sum, queue) => sum + queue.length, 0);
+
     res.json({
         status: 'ok',
         environment: process.env.NODE_ENV || 'development',
@@ -362,7 +429,14 @@ app.get('/health', (req, res) => {
         },
         database: {
             connected: dbConnected,
-            queueSize: offlineQueue.length
+            totalQueueSize: totalQueueSize,
+            queuesByServer: Object.fromEntries(
+                Object.entries(offlineQueues).map(([id, queue]) => [id, queue.length])
+            )
+        },
+        servers: {
+            configured: serverConfig.SERVERS,
+            initialized: Array.from(initializedServers)
         },
         timestamp: new Date().toISOString()
     });
@@ -370,4 +444,4 @@ app.get('/health', (req, res) => {
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-app.listen(port, () => console.log(`Server running on port ${port}`));
+app.listen(port, () => { });
