@@ -275,11 +275,14 @@
                 let mediaHtml = '';
                 if (m.media_id) {
                     const mediaUrl = API_BASE_URL ? `${API_BASE_URL}/api/media/${m.media_id}` : `/api/media/${m.media_id}`;
-                    if (m.mime_type && m.mime_type.startsWith('image/')) {
-                        mediaHtml = `<div class="media-preview" onclick="showMedia('${mediaUrl}', 'img')"><img src="${mediaUrl}" style="width:100%; display:block;"></div>`;
-                    } else {
-                        mediaHtml = `<div class="media-preview" onclick="showMedia('${mediaUrl}', 'file')"><div class="media-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></div></div>`;
-                    }
+                    const type = (m.mime_type && m.mime_type.startsWith('image/')) ? 'img' : 'file';
+                    mediaHtml = `
+                        <div class="media-preview" onclick="showMedia('${mediaUrl}', '${type}')">
+                            <div class="media-icon" style="height: 60px; flex-direction: column; gap: 4px;">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                                <span style="font-size: 10px; opacity: 0.8; letter-spacing: 0.5px;">VIEW ATTACHMENT</span>
+                            </div>
+                        </div>`;
                 }
                 return `
                 <div class="msg-row">
