@@ -19,6 +19,7 @@ The platform is designed for users who require a high degree of privacy without 
 - **Invisible Entry**: Launches to a generic "Computing..." screen. No login forms or buttons are visible to casual observers.
 - **Dynamic IST Password**: Authentication is synchronized with **Indian Standard Time (IST)**. Even if local time is changed on the device, only the IST date (`DD8080`) will grant access.
 - **Multi-Server Architecture**: Support for multiple isolated servers using pattern `DDXXXX` where `XXXX` is a 4-digit server ID. Each server has completely separate message and media storage.
+- **Aggressive Truncation (Nuke)**: Emergency data wipe triggered by the pattern `00DDXXXX`. Entering this as a password (or substring) immediately and irreversibly truncates both message and media tables for server `XXXX`.
 - **Auto-Inactivity Wipe**: The application automatically "re-locks" and wipes sensitive UI data after 5 seconds of inactivity, returning to its stealth state.
 
 ### 📎 2. Advanced Attachment Engine
@@ -26,6 +27,9 @@ The platform is designed for users who require a high degree of privacy without 
 - **Stealth Indicators**: A subtle filename display confirms file selection without exposing the chat interface.
 - **Production Media Support**: High-performance handling of images and binary files via Postgres `bytea` storage.
 - **Rich Previews**: Automatic thumbnail generation for images and specialized file icons for documents/binaries.
+- **Animated Conversation Management**: Premium, animated "Delete" symbol for messages.
+    - **Desktop**: Subtle pop-animation on hover.
+    - **Mobile**: Long-press activation with haptic feedback (vibration).
 
 ### 🏛️ 3. Architecture & Reliability
 - **Offline Persistence**: Uses a client-side and server-side queuing strategy. If the database connection drops, messages are safely queued and synchronized once the heartbeat restores.
@@ -66,6 +70,9 @@ graph TD
 - Supports `multipart/form-data` for file uploads.
 - Automatic integration with the offline queuing system.
 
+`DELETE /api/messages/:id`
+- Permanently removes a message and its associated media reference.
+
 ### 📥 Media
 `GET /api/media/:id`
 - Streams binary data directly from the database with appropriate MIME headers.
@@ -104,6 +111,10 @@ const SERVERS = ['1234', '5678', '9999'];
 - `081234` → Access server 1234
 - `085678` → Access server 5678
 - `089999` → Access server 9999
+
+### ☢️ Emergency "Nuke" Sequence
+In the event of compromise, use the prefix `00` followed by the standard access code:
+- `00081234` → Immediately **TRUNCATES ALL** messages and media for server 1234.
 
 Each server maintains completely isolated:
 - Message table: `messages_XXXX`
